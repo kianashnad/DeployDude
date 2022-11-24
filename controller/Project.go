@@ -3,9 +3,10 @@ package controller
 import (
 	"DeployDude/database"
 	"DeployDude/foundation"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 var password = foundation.GetENV("DEBU_MASTERPASSWORD")
@@ -27,6 +28,8 @@ func DeployProject(c *gin.Context) {
 	}
 
 	foundation.DeployViaDockerCompose(project.DirPath, project.Title)
+	defer foundation.PruneDocker()
+
 	c.String(http.StatusOK, "Done!")
 	return
 }
@@ -86,6 +89,7 @@ func AddProject(c *gin.Context) {
 		})
 		return
 	}
+	defer foundation.PruneDocker()
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    http.StatusOK,
@@ -118,6 +122,16 @@ func RemoveProject(c *gin.Context) {
 		return
 	}
 
+	// removing the app from docker (with its volumes)
+	err = foundation.RemoveAppFromDocker(project.DirPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":  http.StatusBadRequest,
+			"error": "Could not remove the project. Code 21",
+		})
+		return
+	}
+
 	//removing from the disk:
 	_, err = foundation.RunCmd("cd " + foundation.GetENV("DEDU_BASE_DIR") + "rm -rf " + project.DirPath)
 	if err != nil {
@@ -136,6 +150,8 @@ func RemoveProject(c *gin.Context) {
 		})
 		return
 	}
+
+	defer foundation.PruneDocker()
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    http.StatusOK,
